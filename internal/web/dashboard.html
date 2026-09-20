@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Service Health</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1c2024; --muted: #6b7280;
+    --line: #e5e7eb; --up: #16a34a; --down: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --card: #1d2125; --text: #e8eaed; --muted: #9aa3ad;
+      --line: #2d3339; --up: #4ade80; --down: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 20px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .summary { font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+  .summary.ok { color: var(--up); }
+  .summary.bad { color: var(--down); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { white-space: nowrap; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
+  .up .dot { background: var(--up); }
+  .down .dot { background: var(--down); }
+  .up .state { color: var(--up); font-weight: 600; }
+  .down .state { color: var(--down); font-weight: 600; }
+  .name { font-weight: 600; }
+  .url, .err { color: var(--muted); font-size: 13px; word-break: break-all; }
+  .err { color: var(--down); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+  @media (max-width: 560px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Service Health</h1>
+    <div>
+      <span id="summary" class="summary {{if .AllUp}}ok{{else}}bad{{end}}">{{.UpCount}}/{{.Total}} up</span>
+      <span class="meta">updated <span id="updated">{{if .Updated}}{{.Updated}}{{else}}&mdash;{{end}}</span></span>
+    </div>
+  </header>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Service</th>
+        <th class="num hide-sm">Code</th>
+        <th class="num">Latency</th>
+      </tr>
+    </thead>
+    <tbody id="rows">
+      {{range .Services}}
+      <tr class="{{if .Up}}up{{else}}down{{end}}">
+        <td><span class="dot"></span><span class="state">{{if .Up}}UP{{else}}DOWN{{end}}</span></td>
+        <td>
+          <div class="name">{{.Name}}</div>
+          <div class="url">{{.URL}}</div>
+          {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
+        </td>
+        <td class="num hide-sm">{{if .StatusCode}}{{.StatusCode}}{{else}}&mdash;{{end}}</td>
+        <td class="num">{{.LatencyMS}} ms</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4" class="empty">Waiting for the first check&hellip;</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <p class="meta">Refreshing every {{.RefreshSeconds}}s &middot; JSON at <a href="/api/status">/api/status</a></p>
+</div>
+
+<script>
+  // Ask the server for fresh data and redraw the table, so the page
+  // updates without a full reload.
+  const refreshMs = {{.RefreshSeconds}} * 1000;
+
+  function text(el, value) { el.textContent = value; }
+
+  async function refresh() {
+    let data;
+    try {
+      data = await (await fetch("/api/status", { cache: "no-store" })).json();
+    } catch (e) {
+      return; // server restarting or offline; try again next tick
+    }
+
+    const summary = document.getElementById("summary");
+    text(summary, data.up_count + "/" + data.total + " up");
+    summary.className = "summary " + (data.all_up ? "ok" : "bad");
+    text(document.getElementById("updated"), data.updated || "—");
+
+    const rows = document.getElementById("rows");
+    rows.replaceChildren();
+
+    if (!data.services.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 4; td.className = "empty";
+      text(td, "Waiting for the first check…");
+      tr.append(td); rows.append(tr);
+      return;
+    }
+
+    for (const s of data.services) {
+      const tr = document.createElement("tr");
+      tr.className = s.up ? "up" : "down";
+
+      const status = document.createElement("td");
+      const dot = document.createElement("span"); dot.className = "dot";
+      const state = document.createElement("span");
+      state.className = "state"; text(state, s.up ? "UP" : "DOWN");
+      status.append(dot, state);
+
+      const service = document.createElement("td");
+      const name = document.createElement("div");
+      name.className = "name"; text(name, s.name);
+      const url = document.createElement("div");
+      url.className = "url"; text(url, s.url);
+      service.append(name, url);
+      if (s.error) {
+        const err = document.createElement("div");
+        err.className = "err"; text(err, s.error);
+        service.append(err);
+      }
+
+      const code = document.createElement("td");
+      code.className = "num hide-sm";
+      text(code, s.status_code ? s.status_code : "—");
+
+      const latency = document.createElement("td");
+      latency.className = "num";
+      text(latency, s.latency_ms + " ms");
+
+      tr.append(status, service, code, latency);
+      rows.append(tr);
+    }
+  }
+
+  setInterval(refresh, refreshMs);
+  refresh(); // don't wait a full interval for the first update
+</script>
+</body>
+</html>

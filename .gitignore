@@ -1,0 +1,16 @@
+# Build output
+/healthcheck
+/bin/
+*.exe
+
+# Test output
+*.out
+coverage.*
+
+# Local environment / secrets
+.env
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
