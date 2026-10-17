@@ -1,10 +1,13 @@
-# healthcheck
+# HTTP Health Checker
 
 ![CI](https://github.com/sarahhghazali/healthcheck/actions/workflows/ci.yml/badge.svg)
 
-A small, fast command-line tool that checks whether your HTTP services are up.
-It checks every service **concurrently**, prints a status table, and can send
-**Slack alerts** when a service goes down or recovers.
+**Uptime monitoring for your HTTP services, in a single Go binary.**
+
+Give it a list of URLs and it checks them all at once, prints a status table,
+serves a live dashboard, and sends **Slack alerts** when a service goes down or
+recovers. Useful as a cron job, a CI gate, or a small always-on monitor for
+internal services.
 
 ![The dashboard showing four services, one of them down](docs/dashboard.png)
 
